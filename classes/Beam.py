@@ -24,6 +24,8 @@ class Beam:
         Ra, _ = self.reactions()
         return Ra * x - self.load.q * x**2 / 2
 
-    def max_moment(self) -> float:
-        q, L = self.load.q, self.L
+    def max_moment(self, q: float | None = None) -> float:
+        if q is None:
+            q = self.load.q
+        L = self.L
         return (q * L**2) / 8

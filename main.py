@@ -9,6 +9,10 @@ from plot.BeamPlotter import BeamPlotter
 from plot.SectionPlotter import SectionPlotter
 import numpy as np
 
+# ---------------------------------------------------------------------------- #
+#                                 Define Params                                #
+# ---------------------------------------------------------------------------- #
+
 # Load
 load_calc = LoadCalculator()
 q = load_calc.q_ELU # N/m
@@ -33,11 +37,13 @@ d = 0.9 * section.h_tot
 design = FlexuralDesign(section, concrete, steel, d)
 
 M_Ed = beam.max_moment()
+M_Eqp = beam.max_moment(q=load_calc.q_EQP())
+
+# ---------------------------------------------------------------------------- #
+#                             Reinforcement Layout                             #
+# ---------------------------------------------------------------------------- #
 
 A_s = design.reinforcement_area(M_Ed)
-
-print(f"M_Ed = {M_Ed/1e6:.2f} MN·m")
-print(f"A_s = {A_s*1e4:.2f} cm²")
 
 layout = ReinforcementLayout(section)
 design.layout = layout
@@ -50,6 +56,27 @@ layout.add_row(n_groups=1, bars_per_group=1, diameter=32e-3, grouped=False)
 
 d_reel = layout.compute_d_reel()
 print(f"d_reel = {d_reel*1e2:.2f} cm")
+
+
+# ---------------------------------------------------------------------------- #
+#                                   SLS Check                                  #
+# ---------------------------------------------------------------------------- #
+
+limit_results = design.check_stress_limitation(
+    M_Ed,
+    M_Eqp,
+    phi_inf_t0=3.0
+)
+
+print(f"M_Ed = {M_Ed/1e6:.2f} MN·m")
+print(f"M_Eqp = {M_Eqp/1e6:.2f} MN·m")
+print(f"A_s = {A_s*1e4:.2f} cm²")
+print("SLS stress limitation check:")
+print(f"  phi_inf_t0 = {limit_results['phi_inf_t0']:.2f}")
+print(f"  phi_ef = {limit_results['phi_ef']:.2f}")
+print(f"  E_eff = {limit_results['E_eff']/1e9:.2f} GPa")
+print(f"  Steel-concrete equivalence : computed n = {limit_results['n']:.2f}")
+
 
 beam_plotter = BeamPlotter(beam)
 beam_plotter.plot()

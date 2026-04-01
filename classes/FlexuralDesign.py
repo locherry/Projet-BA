@@ -14,7 +14,7 @@ class FlexuralDesign:
         self.concrete = concrete
         self.steel = steel
         self.d = d
-        self.layout: ReinforcementLayout | None = None  # optional typing
+        self.layout: ReinforcementLayout | None = None
 
     def neutral_axis(self, M_Ed: float) -> Dict[str, float]:
         b_eff = self.section.b_eff
@@ -43,3 +43,49 @@ class FlexuralDesign:
         A_s = F_c / sigma_s
         
         return A_s
+
+    def effective_concrete_modulus(self, phi: float = 2.5) -> float:
+        """
+        Effective modulus Ec,eff according to EC2 (creep coefficient phi).
+        """
+        return self.concrete.E_cm / (1.0 + phi)
+
+    def steel_concrete_equivalence_ratio(self, phi: float = 2.5) -> float:
+        """Equivalent n = E_s / E_c,eff."""
+        return self.steel.Es / self.effective_concrete_modulus(phi)
+
+    def phi_effective(self, phi_inf_t0: float, M_Eqp: float, M_Ed: float) -> float:
+        """Effective creep coefficient for SLS: phi_ef = phi(inf,t0) * M_Eqp / M_Ed."""
+        if M_Ed == 0:
+            raise ValueError("M_Ed must be non-zero to compute phi_ef")
+        return phi_inf_t0 * (M_Eqp / M_Ed)
+
+    def check_stress_limitation(
+        self,
+        M_Ed: float,
+        M_Eqp: float,
+        phi_inf_t0: float = 2.5,
+        t0: float = 10.0,
+    ) -> dict:
+        """SLS stress check (compression and tension) based on EC2 rules and fixed n."""
+        # Current effective phi from SLS combination
+        phi_ef = self.phi_effective(phi_inf_t0, M_Eqp, M_Ed)
+        E_eff = self.concrete.E_cm / (1.0 + phi_ef)
+
+        limit_compression = 0.45 * self.concrete.f_ck
+        limit_tension = self.concrete.f_ctm
+        
+        n = self.steel.Es / E_eff
+
+        return {
+            "M_Ed": M_Ed,
+            "M_Eqp": M_Eqp,
+            "phi_inf_t0": phi_inf_t0,
+            "phi_ef": phi_ef,
+            "E_cm": self.concrete.E_cm,
+            "E_eff": E_eff,
+            "n": self.steel.Es / E_eff,
+            "ok_n": abs(self.steel.Es / E_eff - n) < 1e-6,
+            "limit_t": limit_tension,
+            "t0": t0,
+        }
