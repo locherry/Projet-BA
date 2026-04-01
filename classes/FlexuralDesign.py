@@ -64,10 +64,19 @@ class FlexuralDesign:
         self,
         M_Ed: float,
         M_Eqp: float,
-        phi_inf_t0: float = 2.5,
-        t0: float = 10.0,
+        # phi_inf_t0: float = 2.5,
+        t0: float = 28.0,
     ) -> dict:
         """SLS stress check (compression and tension) based on EC2 rules and fixed n."""
+        # Calculation phi_inf_t0
+        a1 = (35/self.concrete.f_cm)^0.7
+        a2 = (35/self.concrete.f_cm)^0.2
+        h0 = (self.concrete.b_w*self.concrete.h_tot)/(self.concrete.b_w+self.concrete.h_tot)
+        phiRH = (1 + (1-0.5)/(0.1*h0**(1/3))*a1)*a2
+        betafcm = 16.8/sqrt(self.concrete.f_cm)
+        betat0 = 1/(0.1+t0**0.2)
+        phi_inf_t0 = phiRH*betafcm*betat0
+        
         # Current effective phi from SLS combination
         phi_ef = self.phi_effective(phi_inf_t0, M_Eqp, M_Ed)
         E_eff = self.concrete.E_cm / (1.0 + phi_ef)
