@@ -64,8 +64,7 @@ print(f"d_reel = {d_reel*1e2:.2f} cm")
 
 limit_results = design.check_stress_limitation(
     M_Ed,
-    M_Eqp,
-    phi_inf_t0=3.0
+    M_Eqp
 )
 
 print(f"M_Ed = {M_Ed/1e6:.2f} MN·m")
