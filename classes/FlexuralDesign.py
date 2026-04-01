@@ -82,10 +82,18 @@ class FlexuralDesign:
         phi_ef = self.phi_effective(phi_inf_t0, M_Eqp, M_Ed)
         E_c_eff = self.concrete.E_cm / (1.0 + phi_ef)
 
+        n = self.steel.Es / E_c_eff
+
+        # Stress
+        A_s = reinforcement_area(self, M_ed)
+        x = fsolve(self.section.b_w*x**2/2+(self.section.b_eff - self.section.b_w)*self.section.h_f*(x-self.section.h_f/2)-n*A_s*(self.section.d-x))
+        if x >= self.section.h_f :
+            I_hr = self.section.b_w*x**3/3 + (self.section.b_eff - self.section.b_w)*self.section.h_f**3/12+ (self.section.b_eff - self.section.b_w)*self.section.h_f*(x-self.section.h_f/2)**2 + n*A_s*(self.section.d-x)**2
+        sigma_s = n*M_ed*(self.section.d-x)/I_hr
+        sigma_c = M_ed*x/I_hr
+
         limit_compression = 0.45 * self.concrete.f_ck
         limit_tension = self.concrete.f_ctm
-        
-        n = self.steel.Es / E_c_eff
 
         return {
             "M_Ed": M_Ed,
@@ -98,6 +106,9 @@ class FlexuralDesign:
             "ok_n": abs(self.steel.Es / E_c_eff - n) < 1e-6,
             "limit_t": limit_tension,
             "t0": t0,
+            "sigma_s" : sigma_s,
+            "sigma_c" : sigma_c,
+            "limites de contrainte respectée acier, béton" : (sigma_s<=limit_tension, sigma_c<=limit_compression)
         }
 
     
