@@ -121,7 +121,6 @@ class FlexuralDesign:
             "t0": t0,
             "sigma_s" : sigma_s,
             "sigma_c" : sigma_c,
-            "limites de contrainte respectée acier, béton" : (sigma_s<=limit_tension, sigma_c<=limit_compression)
         }
 
     def crack_control(self, M_Ed, M_Eqp, A_s):
