@@ -27,12 +27,6 @@ Dimensionnement d'une poutre en béton armé en section en T selon l'Eurocode 2.
 | Béton | C30/37 — f_ck = 30e6 Pa |
 | Acier | HA B500B — f_yk = 500e6 Pa |
 
-## Méthode
-
-Flexion simple à l'ELU sans charge axiale (EC2, chapitre 5).
-L'axe neutre est localisé dans la table de compression (M_Ed < M_ct),
-la section est donc traitée comme une section rectangulaire b_eff × h.
-
 ## Lancer le projet
 
 ```bash

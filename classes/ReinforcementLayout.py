@@ -27,6 +27,17 @@ class ReinforcementLayout:
         if row["grouped"]:
             return row["phi"] * np.sqrt(row["bars_per_group"])
         return row["phi"]
+    
+    def phi_eq(self) -> float:
+        """Equivalent bar diameter φ_eq = Σ(n_i φ_i²) / Σ(n_i φ_i)  (EC2 slide 29)."""
+        sum_n_phi2 = 0.0
+        sum_n_phi  = 0.0
+        for row in self.rows:
+            n_i   = row["n_groups"] * row["bars_per_group"]
+            phi_i = row["phi"]
+            sum_n_phi2 += n_i * phi_i**2
+            sum_n_phi  += n_i * phi_i
+        return sum_n_phi2 / sum_n_phi
 
     @property
     def c_nom(self) -> float:
