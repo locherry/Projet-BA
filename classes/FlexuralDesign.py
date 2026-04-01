@@ -7,7 +7,7 @@ from .TSection import TSection
 from .ReinforcementLayout import ReinforcementLayout
 import numpy as np
 
-from scipy.optimize import fsolve 
+from scipy.optimize import fsolve
 
 
 class FlexuralDesign:
@@ -41,7 +41,6 @@ class FlexuralDesign:
 
         epsilon_c = 3.5e-3
         epsilon_s = epsilon_c * (1 - alpha) / alpha
-        print(epsilon_s)
         sigma_s = self.steel.stress(epsilon_s)
 
         F_c = 0.8 * alpha * self.section.b_eff * self.d * self.concrete.f_cd
@@ -73,7 +72,15 @@ class FlexuralDesign:
         t0: float = 10,
     ) -> dict:
         if self.layout == None:
-            raise(ValueError("Layout must be set"))
+            raise (ValueError("Layout must be set"))
+
+        b_w = self.section.b_w
+        b_eff = self.section.b_eff
+        h_f = self.section.h_f
+        h = self.section.h_tot
+        d = self.d
+        n = self.steel.Es / self.concrete.E_cm  # α_e = E_s / E_cm
+
         """SLS stress check (compression and tension) based on EC2 rules and fixed n."""
         # Calculation phi_inf_t0
         a1 = (35 / (self.concrete.f_cm * 1e-6)) ** 0.7
@@ -134,6 +141,9 @@ class FlexuralDesign:
         }
 
     def crack_control(self, M_Ed, M_Eqp, A_s):
+        if self.layout == None:
+            raise (ValueError("Layout must be set"))
+
         # ------------------------------------------------------------------ #
         #  k(x) – non-linear stress distribution factor                      #
         # ------------------------------------------------------------------ #
@@ -154,20 +164,109 @@ class FlexuralDesign:
                 return 0.65
             else:
                 return 1.21 - 0.7 * var
-        
+
         # ------------------------------------------------------------------ #
         #  1. Minimum reinforcement area  (slide 20)                          #
         # ------------------------------------------------------------------ #
-        k_c = 0.4 #Flexion simple 
-        
+        k_c = 0.4  # Flexion simple
+        k_t = 0.4  # Long term loading (slide 27)
 
         # Concrete Area under tension before first crack
         x_na = self.neutral_axis(M_Ed)["x_na"]
         A_ct = self.section.b_w * (self.section.h_tot - x_na)
-        
+
         # Maximum effort in tensile zone
         f_ct_eff = self.concrete.f_ctm  # f_ct,eff = f_ct,m  (slide 20)
 
         As_min = k_c * k(x_na) * f_ct_eff * A_ct / self.steel.f_yk
+
+        # ------------------------------------------------------------------ #
+        #  2. SLS cracked homogeneous N.A.  (slide 18)                        #
+        #     b_w x²/2 + (b_eff - b_w) h_f (x - h_f/2) - n A_s (d - x) = 0 #
+        # ------------------------------------------------------------------ #
+        b_w = self.section.b_w
+        b_eff = self.section.b_eff
+        h_f = self.section.h_f
+        h = self.section.h_tot
+        d = self.d
+        n = self.steel.Es / self.concrete.E_cm  # α_e = E_s / E_cm
+
+        a = b_w / 2
+        b = (b_eff - b_w) * h_f + n * A_s
+        c = -(b_eff - b_w) * h_f * (h_f / 2) - n * A_s * d
+        x = (-b + np.sqrt(b**2 - 4 * a * c)) / (2 * a)
+
+        # ------------------------------------------------------------------ #
+        #  3. Cracked second moment of area I_hr  (slide 18)                  #
+        # ------------------------------------------------------------------ #
+        if x <= h_f:
+            I_hr = b_eff * x**3 / 3 + n * A_s * (d - x) ** 2
+        else:
+            I_hr = (
+                b_w * x**3 / 3
+                + (b_eff - b_w) * h_f**3 / 12
+                + (b_eff - b_w) * h_f * (x - h_f / 2) ** 2
+                + n * A_s * (d - x) ** 2
+            )
+
+        # ------------------------------------------------------------------ #
+        #  4. Steel stress under quasi-permanent combination  (slide 18, 27)  #
+        # ------------------------------------------------------------------ #
+        sigma_s = n * M_Eqp * (d - x) / I_hr
+
+        # ------------------------------------------------------------------ #
+        #  5. Effective concrete area and reinforcement ratio  (slide 27-28)  #
+        #     h_c,ef = min{ 2.5(h-d) ; (h-x)/3 ; h/2 }                      #
+        # ------------------------------------------------------------------ #
+        h_c_ef = min(2.5 * (h - d), (h - x) / 3, h / 2)
+        A_c_eff = b_w * h_c_ef
+        rho_p_eff = A_s / A_c_eff
+
+        # ------------------------------------------------------------------ #
+        #  6. Mean strain difference ε_sm - ε_cm  (slide 27)                 #
+        #     ≥ 0.6 σ_s / E_s                                                #
+        # ------------------------------------------------------------------ #
+        eps_diff = (
+            sigma_s - k_t * (f_ct_eff / rho_p_eff) * (1 + n * rho_p_eff)
+        ) / self.steel.Es
+        eps_diff = max(eps_diff, 0.6 * sigma_s / self.steel.Es)
+
+        # ------------------------------------------------------------------ #
+        #  7. Maximum crack spacing s_r,max  (slide 29)                       #
+        #     k1=0.8 (HA), k2=0.5 (bending), k3, k4=0.425                   #
+        # ------------------------------------------------------------------ #
+        k1, k2, k4 = 0.8, 0.5, 0.425
+        c_mm = self.layout.c_nom * 1e3
+        k3 = 3.4 if c_mm <= 25 else 3.4 * (25 / c_mm) ** (2 / 3)
+
+        phi_eq = self.layout.phi_eq()
+        s_r_max = k3 * self.layout.c_nom + k1 * k2 * k4 * phi_eq / rho_p_eff
+
+        # ------------------------------------------------------------------ #
+        #  8. Crack width  w_k = s_r,max · (ε_sm - ε_cm)  (slide 24)        #
+        # ------------------------------------------------------------------ #
+        w_k = s_r_max * eps_diff
         
-        print(As_min)
+        w_max = 0.4 # Quasi parmanent, else 0.2 (slide 22)
+
+        return {
+            # Min reinforcement
+            "As_min": As_min,
+            "ok_As_min": A_s >= As_min,
+            # SLS section state
+            "x_SLS": x,
+            "I_hr": I_hr,
+            "sigma_s": sigma_s,
+            # Effective area
+            "h_c_ef": h_c_ef,
+            "A_c_eff": A_c_eff,
+            "rho_p_eff": rho_p_eff,
+            # Strain
+            "eps_diff": eps_diff,
+            # Crack spacing and width
+            "phi_eq": phi_eq,
+            "s_r_max": s_r_max,
+            "w_k": w_k,
+            "w_max": w_max,
+            "ok_wk": w_k <= w_max,
+        }

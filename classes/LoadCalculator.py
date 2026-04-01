@@ -25,7 +25,6 @@ class LoadCalculator:
     def Q_total(self) -> float:
         q = 0
         for i,room in enumerate(self.Q_components) :
-            print(i, room)
             current_q = self.Q_components[room]["q"]
             q += current_q
         return q
@@ -42,7 +41,6 @@ class LoadCalculator:
         """Quasi-permanent SLS load (G + ψ2·Q)."""
         q = 0
         for i,room in enumerate(self.Q_components) :
-            print(i, room)
             current_q = self.Q_components[room]["q"]
             current_psi_2 = self.Q_components[room]["psi_2"]
             q += current_q * current_psi_2

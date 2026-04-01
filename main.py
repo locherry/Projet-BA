@@ -49,10 +49,10 @@ layout = ReinforcementLayout(section)
 design.layout = layout
 
 # Bottom row: 3 groups of 2 bars
-layout.add_row(n_groups=3, bars_per_group=2, diameter=32e-3, grouped=True)
+layout.add_row(n_groups=4, bars_per_group=1, diameter=32e-3, grouped=True)
 
 # Top row: 1 bar
-layout.add_row(n_groups=1, bars_per_group=1, diameter=32e-3, grouped=False)
+layout.add_row(n_groups=4, bars_per_group=1, diameter=20e-3, grouped=False)
 
 d_reel = layout.compute_d_reel()
 print(f"d_reel = {d_reel*1e2:.2f} cm")
@@ -73,6 +73,8 @@ print(f"A_s = {A_s*1e4:.2f} cm²")
 print("SLS stress limitation check:")
 print(f"  phi_inf_t0 = {limit_results['phi_inf_t0']:.2f}")
 print(f"  phi_ef = {limit_results['phi_ef']:.2f}")
+print(f"  sigma_s = {limit_results['sigma_s']/1e6:.2f} MPa")
+print(f"  sigma_c = {limit_results['sigma_c']/1e6:.2f} MPa")
 # print(f"  E_eff = {limit_results['E_eff']/1e9:.2f} GPa")
 print(f"  Steel-concrete equivalence : computed n = {limit_results['n']:.2f}")
 
@@ -80,15 +82,17 @@ print(f"  Steel-concrete equivalence : computed n = {limit_results['n']:.2f}")
 # ---------------------------------------------------------------------------- #
 #                                 Crack Control                                #
 # ---------------------------------------------------------------------------- #
-crack_results = design.crack_control(M_Ed, M_Eqp, A_s)
+crack = design.crack_control(M_Ed, M_Eqp, A_s)
 
-print("\nCrack control check:")
-# print(f"  x_NA (SLS) = {crack_results['x_na_SLS']*1e2:.2f} cm")
-# print(f"  A_s,min    = {crack_results['A_s_min']*1e4:.2f} cm²  {'✓' if crack_results['ok_As_min'] else '✗'}")
-# print(f"  σ_s        = {crack_results['sigma_s']/1e6:.1f} MPa")
-# print(f"  ρ_p,eff    = {crack_results['rho_p_eff']:.4f}")
-# print(f"  s_r,max    = {crack_results['s_r_max']*1e3:.1f} mm")
-# print(f"  w_k        = {crack_results['w_k']*1e3:.3f} mm  (limit {crack_results['w_max']*1e3:.1f} mm)  {'✓' if crack_results['ok_wk'] else '✗'}")
+
+print("\nCrack control:")
+print(f"  As,min  = {crack['As_min']*1e4:.2f} cm²  {'✓' if crack['ok_As_min'] else '✗'}")
+print(f"  x (SLS) = {crack['x_SLS']*1e2:.2f} cm")
+print(f"  σ_s     = {crack['sigma_s']/1e6:.1f} MPa")
+print(f"  h_c,ef  = {crack['h_c_ef']*1e2:.2f} cm")
+print(f"  ρ_p,eff = {crack['rho_p_eff']:.4f}")
+print(f"  s_r,max = {crack['s_r_max']*1e3:.1f} mm")
+print(f"  w_k     = {crack['w_k']*1e3:.3f} mm  (limit {crack['w_max']*1e3:.1f} mm)  {'✓' if crack['ok_wk'] else '✗'}")
 
 # ---------------------------------------------------------------------------- #
 #                                     Plots                                    #
