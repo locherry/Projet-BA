@@ -8,6 +8,7 @@ from classes.Rules import DurabilityRules
 
 from plot.BeamPlotter import BeamPlotter
 from plot.SectionPlotter import SectionPlotter
+from plot.ReinforcementPlotter import ReinforcementPlotter
 import numpy as np
 
 # ---------------------------------------------------------------------------- #
@@ -134,3 +135,6 @@ beam_plotter.plot()
 
 section_plotter = SectionPlotter(design)
 section_plotter.plot(M_Ed)
+
+reinforcement_plotter = ReinforcementPlotter(design)
+reinforcement_plotter.plot(M_Ed)
