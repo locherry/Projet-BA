@@ -2,6 +2,7 @@ from classes.TSection import TSection
 from classes.Materials import Concrete, Steel
 from classes.Beam import Beam, DistributedLoad
 from classes.FlexuralDesign import FlexuralDesign
+from classes.ShearDesign import ShearDesign
 from classes.LoadCalculator import LoadCalculator
 from classes.ReinforcementLayout import ReinforcementLayout
 from classes.Rules import DurabilityRules
@@ -9,6 +10,7 @@ from classes.Rules import DurabilityRules
 from plot.BeamPlotter import BeamPlotter
 from plot.SectionPlotter import SectionPlotter
 from plot.ReinforcementPlotter import ReinforcementPlotter
+from plot.CurtailmentPlotter import CurtailmentPlotter
 import numpy as np
 
 # ---------------------------------------------------------------------------- #
@@ -17,14 +19,15 @@ import numpy as np
 
 # Loads
 load_calc = LoadCalculator()
-q_elu = load_calc.q_ELU          # ULS distributed load [N/m]
-q_eqp = load_calc.q_EQP()        # quasi-permanent SLS load [N/m]
+q_elu = load_calc.q_ELU  # ULS distributed load [N/m]
+q_eqp = load_calc.q_EQP()  # quasi-permanent SLS load [N/m]
 
 # Geometry
 L = 15.25  # [m]
 
 beam_uls = Beam(L, DistributedLoad(q_elu))
 beam_eqp = Beam(L, DistributedLoad(q_eqp))
+
 
 section = TSection(
     h_tot=1.25,
@@ -34,7 +37,7 @@ section = TSection(
 )
 
 concrete = Concrete(f_ck=30e6, gamma_c=1.5)
-steel    = Steel(f_yk=500e6,  gamma_s=1.15)
+steel = Steel(f_yk=500e6, gamma_s=1.15)
 
 # First estimate of effective depth — will be updated to d_reel once
 # the reinforcement layout is known.
@@ -42,7 +45,7 @@ d_estimate = 0.9 * section.h_tot
 
 design = FlexuralDesign(section, concrete, steel, d=d_estimate)
 
-M_Ed  = beam_uls.max_moment()
+M_Ed = beam_uls.max_moment()
 M_Eqp = beam_eqp.max_moment()
 
 # Durability parameters
@@ -105,10 +108,14 @@ print(f"  φ_ef      = {stress['phi_ef']:.2f}")
 print(f"  E_c,eff   = {stress['E_c_eff']/1e9:.2f} GPa")
 print(f"  n (αe)    = {stress['n']:.2f}")
 print(f"  x_SLS     = {stress['x_SLS']*1e2:.2f} cm")
-print(f"  σ_c       = {stress['sigma_c']/1e6:.2f} MPa  (limit {stress['limit_compression']/1e6:.1f} MPa)  "
-      f"{'✓' if stress['ok_compression'] else '✗'}")
-print(f"  σ_s       = {stress['sigma_s']/1e6:.2f} MPa  (limit {stress['limit_steel']/1e6:.1f} MPa)  "
-      f"{'✓' if stress['ok_steel'] else '✗'}")
+print(
+    f"  σ_c       = {stress['sigma_c']/1e6:.2f} MPa  (limit {stress['limit_compression']/1e6:.1f} MPa)  "
+    f"{'✓' if stress['ok_compression'] else '✗'}"
+)
+print(
+    f"  σ_s       = {stress['sigma_s']/1e6:.2f} MPa  (limit {stress['limit_steel']/1e6:.1f} MPa)  "
+    f"{'✓' if stress['ok_steel'] else '✗'}"
+)
 
 # ---------------------------------------------------------------------------- #
 #                       Step 5 — Crack Control                                 #
@@ -116,15 +123,69 @@ print(f"  σ_s       = {stress['sigma_s']/1e6:.2f} MPa  (limit {stress['limit_st
 crack = design.crack_control(M_Ed, M_Eqp, A_s=A_s_provided, w_max=w_max)
 
 print("\n--- Crack Control (EC2 §7.3) ---")
-print(f"  As,min    = {crack['As_min']*1e4:.2f} cm²  {'✓' if crack['ok_As_min'] else '✗'}")
+print(
+    f"  As,min    = {crack['As_min']*1e4:.2f} cm²  {'✓' if crack['ok_As_min'] else '✗'}"
+)
 print(f"  x (SLS)   = {crack['x_SLS']*1e2:.2f} cm")
 print(f"  σ_s       = {crack['sigma_s']/1e6:.1f} MPa")
 print(f"  h_c,ef    = {crack['h_c_ef']*1e2:.2f} cm")
 print(f"  ρ_p,eff   = {crack['rho_p_eff']:.4f}")
 print(f"  φ_eq      = {crack['phi_eq']*1e3:.1f} mm")
 print(f"  s_r,max   = {crack['s_r_max']*1e3:.1f} mm")
-print(f"  w_k       = {crack['w_k']*1e3:.3f} mm  (limit {crack['w_max']*1e3:.1f} mm)  "
-      f"{'✓' if crack['ok_wk'] else '✗'}")
+print(
+    f"  w_k       = {crack['w_k']*1e3:.3f} mm  (limit {crack['w_max']*1e3:.1f} mm)  "
+    f"{'✓' if crack['ok_wk'] else '✗'}"
+)
+
+# ---------------------------------------------------------------------------- #
+#                       Step 6 — Shear & Cutoff for TD 5&6                     #
+# ---------------------------------------------------------------------------- #
+
+# --- 1) Échantillonnage de la poutre (x, M_Ed, V_Ed) ---
+
+# nombre de points le long de la poutre
+N = 201
+x = np.linspace(0, L, N)
+
+# calculer M_Ed(x) et V_Ed(x) pour la charge uniforme q_elu
+# ici, pour une poutre simplement appuyée:
+m_ed = beam_uls.moment(x)  # M(x) en N·m
+v_ed = beam_uls.shear(x)  # V(x) en N
+
+
+# --- 2) Effort tranchant et cadres (ShearDesign) ---
+shear = ShearDesign(
+    section=section,
+    v_ed=v_ed,
+    x=x,
+    d=design.d,
+    f_ywd=steel.f_yk / 1.15,  # f_ywd
+    f_cd=concrete.f_ck / 1.5,  # f_cd
+    phi_t=10e-3,  # max 10 mm
+)
+
+shear.print_summary()
+
+
+# ---------------------------------------------------------------------------- #
+#                       Step 7 — Bar Curtailment (épure d'arrêt)               #
+# ---------------------------------------------------------------------------- #
+# Place this right after shear.print_summary() in main.py
+ 
+from classes.CurtailmentDesign import CurtailmentDesign
+ 
+curtailment = CurtailmentDesign(
+    beam=beam_uls,
+    section=section,
+    design=design,          # already has layout attached (design.d = d_reel)
+    concrete=concrete,
+    steel=steel,
+    cot_theta=2.5,          # matches ShearDesign (COT_THETA_MAX)
+    x=x,                    # reuse the same abscissa array from Step 6
+)
+
+curtailment.print_summary()
+ 
 
 # ---------------------------------------------------------------------------- #
 #                                   Plots                                      #
@@ -138,3 +199,6 @@ section_plotter.plot(M_Ed)
 
 reinforcement_plotter = ReinforcementPlotter(design)
 reinforcement_plotter.plot(M_Ed)
+
+curtailment_plotter = CurtailmentPlotter(curtailment, design)
+curtailment_plotter.plot()
