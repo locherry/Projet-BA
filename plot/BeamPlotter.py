@@ -47,6 +47,16 @@ class BeamPlotter:
 
         x, T, M, Ra, Rb, T_max, T_min, M_max, x_Mmax = self._compute_fields()
 
+        # Convert all force/moment values from SI (N, N·m) to kN, kN·m
+        q      = q      / 1e3
+        T      = T      / 1e3
+        M      = M      / 1e3
+        Ra     = Ra     / 1e3
+        Rb     = Rb     / 1e3
+        T_max  = T_max  / 1e3
+        T_min  = T_min  / 1e3
+        M_max  = M_max  / 1e3
+
         fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 10))
         fig.suptitle(
             "Poutre isostatique — TNP Villeurbanne  |  Niveau +7.55 m  |  "
@@ -123,9 +133,6 @@ class BeamPlotter:
         ax2.plot(x, T, color="tab:green", lw=2.2)
         ax2.axhline(0, color="gray", lw=0.8, ls="--")
 
-        ax2.plot(0, T_max, "o", color="tab:green")
-        ax2.plot(L, T_min, "o", color="tab:green")
-        
         ax2.plot(0, T_max, "o", color="tab:green", ms=6)
         ax2.annotate(f"$T_{{max}} = +{T_max:.1f}$ kN",
                     xy=(0, T_max), xytext=(0.4, T_max),
@@ -142,7 +149,6 @@ class BeamPlotter:
                     fontsize=8.5, color="tab:green",
                     arrowprops=dict(arrowstyle="-", color="tab:green", lw=0.8))
 
-
         ax2.set_xlim(0, L)
         ax2.set_ylabel("$T(x)$  [kN]")
         ax2.set_xlabel("$x$  [m]")
@@ -155,7 +161,6 @@ class BeamPlotter:
         ax3.plot(x, M, color="tab:purple", lw=2.2)
         ax3.axhline(0, color="gray", lw=0.8, ls="--")
 
-        
         ax3.plot(x_Mmax, M_max, "o", color="tab:purple", ms=7)
         ax3.annotate(f"$M_{{max}} = {M_max:.1f}$ kN·m\n$x = {x_Mmax:.2f}$ m",
                     xy=(x_Mmax, M_max), xytext=(x_Mmax + 3, M_max * .9),
@@ -167,7 +172,6 @@ class BeamPlotter:
         ax3.annotate("$M = 0$", xy=(0, 0), xytext=(0.4, -M_max * 0.10), fontsize=8, color="tab:purple")
         ax3.annotate("$M = 0$", xy=(L, 0), xytext=(L - 1.6, -M_max * 0.10), fontsize=8, color="tab:purple")
 
-        
         ax3.set_xlim(0, L)
         ax3.set_ylabel("$M(x)$  [kN·m]")
         ax3.set_xlabel("$x$  [m]")
