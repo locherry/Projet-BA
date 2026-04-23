@@ -229,7 +229,12 @@ class CurtailmentDesign:
         """
         f_ck_MPa = self.concrete.f_ck / 1e6
         f_ctd    = 0.7 * 0.3 * f_ck_MPa ** (2 / 3) / 1.5   # [MPa]
-        f_bd     = 2.25 * 1.0 * 1.0 * f_ctd                 # [MPa]
+        f_bd     = 2.25 * 1.0 * 1.0 * f_ctd    
+        
+        # σ_sd at the cut-off is taken conservatively as f_yd (bar fully stressed).
+        # EC2 §8.4.3 allows using the actual stress at the section, which would
+        # reduce l_bd where bars are not fully yielding — conservative as-is.
+        # [MPa]
         sigma_sd = self.f_yd / 1e6                           # [MPa]
         phi_mm   = phi * 1e3                                 # [mm]
 

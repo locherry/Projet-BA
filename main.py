@@ -10,6 +10,7 @@ from classes.Rules import DurabilityRules
 from plot.BeamPlotter import BeamPlotter
 from plot.SectionPlotter import SectionPlotter
 from plot.ReinforcementPlotter import ReinforcementPlotter
+from plot.ReinforcementPlanPlotter import ReinforcementPlanPlotter
 from plot.CurtailmentPlotter import CurtailmentPlotter
 import numpy as np
 
@@ -21,6 +22,8 @@ import numpy as np
 load_calc = LoadCalculator()
 q_elu = load_calc.q_ELU  # ULS distributed load [N/m]
 q_eqp = load_calc.q_EQP()  # quasi-permanent SLS load [N/m]
+print(f"q_elu = {q_elu:.1f} N/m")
+print(f"q_eqp = {q_eqp:.1f} N/m")
 
 # Geometry
 L = 15.25  # [m]
@@ -202,3 +205,6 @@ reinforcement_plotter.plot(M_Ed)
 
 curtailment_plotter = CurtailmentPlotter(curtailment, design)
 curtailment_plotter.plot()
+
+reinforcement__plan_plotter= ReinforcementPlanPlotter(curtailment, design, beam_uls)
+reinforcement__plan_plotter.plot()

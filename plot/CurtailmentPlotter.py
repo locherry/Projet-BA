@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.lines import Line2D
 from typing import List, Tuple
-
+import numpy as np
 
 class CurtailmentPlotter:
     def __init__(self, curtailment, design):
@@ -12,7 +12,7 @@ class CurtailmentPlotter:
     def plot(
         self,
         figsize: Tuple[float, float] = (10, 5),
-        save_path="./plot/curtailement.svg",
+        save_path="./plot/curtailment.svg",
     ):
         """
         Top:
@@ -41,7 +41,7 @@ class CurtailmentPlotter:
         # TOP: MOMENT DIAGRAM
         # =========================
         M_ed = self.curtailment.m_ed / 1e6
-        M_shift = self.curtailment.m_ed_shifted / 1e6
+        M_shift =  np.maximum(self.curtailment.m_ed_shifted / 1e6, M_ed)
 
         ax1.plot(x, M_ed, label="M_Ed")
         ax1.plot(x, M_shift, "--", label=f"M_Ed shifted (a_l={self.curtailment.al:.2f} m)")

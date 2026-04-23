@@ -40,6 +40,7 @@ class ShearDesign:
         phi_t : diamètre des cadres [m]
         """
         self.bw = section.b_w
+        self.section = section
         self.v_ed  = np.asarray(v_ed,  dtype=float)
         self.x     = np.asarray(x,     dtype=float)
         self.d     = float(d)
@@ -105,7 +106,12 @@ class ShearDesign:
         v_min = 0.035 * k ** 1.5 * np.sqrt(f_ck_MPa)   # [MPa^0.5 * dim'less]
 
         # Contrainte normale [MPa]
-        sigma_cp = min(N_Ed / (bw * (d / 0.9)), 0.2 * f_ck_MPa * 1e6) / 1e6
+        
+        # FIX: use gross area A_c of the T-section, not a derived area
+        A_c = self.section.b_eff * self.section.h_f + self.section.b_w * self.section.h_w
+        sigma_cp = min(N_Ed / A_c, 0.2 * f_ck_MPa * 1e6) / 1e6  # [MPa]
+
+        # sigma_cp = min(N_Ed / (bw * (d / 0.9)), 0.2 * f_ck_MPa * 1e6) / 1e6
 
         # V_Rd,c eq. (6.2a)
         v_rdc_a = (C_Rd_c * k * (100 * rho_l * f_ck_MPa) ** (1 / 3)
@@ -144,9 +150,12 @@ class ShearDesign:
         f_ck_MPa = self.f_cd * 1.5 / 1e6
         nu = 0.6 * (1.0 - f_ck_MPa / 250.0)
 
-        # V_Rd,max = ν·f_cd·bw·z / (cot θ + tan θ)
-        # On résout pour cot θ : on balaye la plage [1 ; 2.5]
-        cot_vals = np.linspace(self.COT_THETA_MIN, self.COT_THETA_MAX, 500)
+        # V_Rd,max(cot θ) = ν·f_cd·bw·z / (cot θ + tan θ)
+        # The denominator (cot θ + 1/cot θ) has a minimum at cot θ = 1 (θ = 45°),
+        # so V_Rd,max is highest at cot θ = 1 and decreases toward cot θ = 2.5.
+        # Scanning from MIN to MAX finds the smallest cot θ that still satisfies
+        # V_Rd,max ≥ V_Ed,max — i.e. the least-inclined strut that is still safe.
+        cot_vals = np.linspace(self.COT_THETA_MIN, self.COT_THETA_MAX, 2000)
         tan_vals = 1.0 / cot_vals
         v_rdmax_vals = nu * self.f_cd * bw * z / (cot_vals + tan_vals)
 
@@ -254,7 +263,13 @@ class ShearDesign:
         """
         self._check_bw()
         f_ck_MPa = self.f_cd * 1.5 / 1e6
-        f_yk_MPa = self.f_ywd * 1.15            # remonte à f_yk
+        # f_ywd is assumed to be f_yk / γ_s (= f_yk / 1.15); we recover f_yk here.
+        # If f_ywd was passed as the characteristic value, this is wrong — assert guards it.
+        assert self.f_ywd < 600e6, (
+            "f_ywd appears to be a characteristic value, not a design value "
+            "(expected f_yk/1.15). Pass f_yd = f_yk/1.15."
+        )
+        f_yk_MPa = self.f_ywd * 1.15 / 1e6
         rho_w_min = 0.08 * np.sqrt(f_ck_MPa) / f_yk_MPa
         bw = cast(float, self.bw)
         return rho_w_min * bw
