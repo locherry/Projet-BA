@@ -59,6 +59,7 @@ class SectionPlotter:
                 lw=0.8,
             )
         )
+        
         ax_sec.add_patch(
             patches.Rectangle(
                 (-section.b_w / 2, 0),
@@ -76,7 +77,7 @@ class SectionPlotter:
             color="k",
             lw=1.5,
             ls="--",
-            label=f"A.N. x = {y_na:.2f} cm",
+            label=f"A.N.",
         )
 
 
