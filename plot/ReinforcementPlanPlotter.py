@@ -20,11 +20,13 @@ class ReinforcementPlanPlotter:
         curtailment,
         design,
         beam,
+        shear,
         save_path: str = "./plot/reinforcement_plan.svg",
     ):
         self.curtailment = curtailment
         self.design = design
         self.beam = beam
+        self.shear = shear          # ShearDesign instance — optional
         self.save_path = save_path
 
     @property
@@ -95,7 +97,10 @@ class ReinforcementPlanPlotter:
 
         # Flange/web interface dashed line
         ax.axhline(h_w, color="0.5", linestyle="--", linewidth=0.6, zorder=1)
-
+        
+        
+        # ── Draw stirrups ─────────────────────────────────────────
+        self._draw_stirrups(ax, h_w, h_tot, cotation_offset)
 
         # ── Draw reinforcement bars ────────────────────────────────
         # Each layer is plotted at its actual y position (from bottom fibre),
@@ -250,10 +255,67 @@ class ReinforcementPlanPlotter:
 
     # ─────────────────────────────────────────────────────────────
 
+    def _draw_stirrups(self, ax, h_w: float, h_tot: float, cotation_offset:float):
+        """
+        Draw vertical stirrups (cadres) at the adopted spacing from ShearDesign.
+        Each stirrup is rendered as a U-shape: two vertical legs + bottom horizontal,
+        spanning the full web height (cover to cover).
+        A spacing annotation is added below the first stirrup pair.
+        """
+        shear   = self.shear
+        summary = shear.design_summary()
+
+        s       = summary["s_adopted"]          # spacing [m]
+        phi_t   = shear.phi_t                   # stirrup diameter [m]
+        L       = self.L
+        layout  = self.design.layout
+
+        c_nom   = layout.c_nom                  # nominal cover [m]
+
+        # Stirrup legs run from c_nom (bottom) to h_tot - c_nom (top of web)
+        y_bot = c_nom
+        y_top = h_w - c_nom      # stirrups close at the web top (below flange)
+
+        color  = "tab:green"
+        lw     = 1.4
+
+        # x positions of stirrups: start at s/2 from left support, step by s
+        x_stirrups = np.arange(s / 2, L, s)
+
+        for xs in x_stirrups:
+            # Left leg
+            ax.plot([xs - phi_t / 2, xs - phi_t / 2], [y_bot, y_top],
+                    color=color, linewidth=lw, zorder=2)
+            # Right leg
+            ax.plot([xs + phi_t / 2, xs + phi_t / 2], [y_bot, y_top],
+                    color=color, linewidth=lw, zorder=2)
+            # Bottom horizontal (closing bar)
+            ax.plot([xs - phi_t / 2, xs + phi_t / 2], [y_bot, y_bot],
+                    color=color, linewidth=lw, zorder=2)
+            # Top horizontal (closing bar — inside flange)
+            ax.plot([xs - phi_t / 2, xs + phi_t / 2], [y_top, y_top],
+                    color=color, linewidth=lw, zorder=2)
+
+        # ── Spacing annotation (between first two stirrups) ───────
+        if len(x_stirrups) >= 10:
+            x0, x1 = x_stirrups[8], x_stirrups[9]
+            y_ann  = y_bot - 0.06 * h_tot - 0.3* cotation_offset
+            ax.annotate(
+                "",
+                xy=(x1, y_ann), xytext=(x0, y_ann),
+                arrowprops=dict(arrowstyle="<->", linewidth=0.8, color=color),
+                zorder=4,
+            )
+            ax.text(
+                (x0 + x1) / 2, y_ann - 0.04 * h_tot,
+                f"st = {s*100:.0f} cm\n"
+                f"ø{phi_t*1e3:.0f} — {int(round(L/s))} cad.",
+                ha="center", fontsize=6.5, color=color, zorder=4,
+            )
+
+
     def _draw_hook(self, ax, x, y, side, r, v, lw, color):
-        """
-        Draw a 45° hook tangent to the bar.
-        """
+        """Draw a 45° hook tangent to the bar end."""
 
         if side == "left":
             xc = x + r

@@ -20,17 +20,16 @@ import numpy as np
 
 # Loads
 load_calc = LoadCalculator()
-q_elu = load_calc.q_ELU  # ULS distributed load [N/m]
-q_eqp = load_calc.q_EQP()  # quasi-permanent SLS load [N/m]
-print(f"q_elu = {q_elu:.1f} N/m")
-print(f"q_eqp = {q_eqp:.1f} N/m")
+q_ULS = load_calc.q_ULS  # ULS distributed load [N/m]
+q_SLS_car = load_calc.q_SLS_car  # characteristic SLS load [N/m]
+q_SLS_qp = load_calc.q_SLS_qp()  # quasi-permanent SLS load [N/m]
 
 # Geometry
 L = 15.25  # [m]
 
-beam_uls = Beam(L, DistributedLoad(q_elu))
-beam_eqp = Beam(L, DistributedLoad(q_eqp))
-
+beam_uls = Beam(L, DistributedLoad(q_ULS))
+beam_sls_qp = Beam(L, DistributedLoad(q_SLS_qp))
+beam_sls_car = Beam(L, DistributedLoad(q_SLS_car))
 
 section = TSection(
     h_tot=1.25,
@@ -49,7 +48,8 @@ d_estimate = 0.9 * section.h_tot
 design = FlexuralDesign(section, concrete, steel, d=d_estimate)
 
 M_Ed = beam_uls.max_moment()
-M_Eqp = beam_eqp.max_moment()
+M_Eqp = beam_sls_qp.max_moment()
+M_Ed_car = beam_sls_car.max_moment()
 
 # Durability parameters
 rules = DurabilityRules()
@@ -103,7 +103,7 @@ print(f"A_s provided              = {A_s_provided*1e4:.2f} cm²")
 #                       Step 4 — SLS Stress Limitation                        #
 # ---------------------------------------------------------------------------- #
 
-stress = design.check_stress_limitation(M_Ed, M_Eqp, A_s=A_s_provided)
+stress = design.check_stress_limitation(M_Ed, M_Ed_car, A_s=A_s_provided)
 
 print("\n--- SLS Stress Limitation (EC2 §7.2) ---")
 print(f"  φ(∞,t0)   = {stress['phi_inf_t0']:.2f}")
@@ -150,7 +150,7 @@ print(
 N = 201
 x = np.linspace(0, L, N)
 
-# calculer M_Ed(x) et V_Ed(x) pour la charge uniforme q_elu
+# calculer M_Ed(x) et V_Ed(x) pour la charge uniforme q_ULS
 # ici, pour une poutre simplement appuyée:
 m_ed = beam_uls.moment(x)  # M(x) en N·m
 v_ed = beam_uls.shear(x)  # V(x) en N
@@ -206,5 +206,5 @@ reinforcement_plotter.plot(M_Ed)
 curtailment_plotter = CurtailmentPlotter(curtailment, design)
 curtailment_plotter.plot()
 
-reinforcement__plan_plotter= ReinforcementPlanPlotter(curtailment, design, beam_uls)
+reinforcement__plan_plotter= ReinforcementPlanPlotter(curtailment, design, beam_uls, shear)
 reinforcement__plan_plotter.plot()

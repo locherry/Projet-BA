@@ -28,16 +28,13 @@ class LoadCalculator:
             current_q = self.Q_components[room]["q"]
             q += current_q
         return q
-
+    
     @property
-    def q_ELS(self) -> float:
+    def q_SLS_car(self) -> float:
+        """Combinaison caractéristique (G + Q) — EC2 §7.2 contraintes."""
         return self.G_total + self.Q_total
 
-    @property
-    def q_ELU(self) -> float:
-        return 1.35 * self.G_total + 1.5 * self.Q_total
-
-    def q_EQP(self) -> float:
+    def q_SLS_qp(self) -> float:
         """Quasi-permanent SLS load (G + ψ2·Q)."""
         q = 0
         for i,room in enumerate(self.Q_components) :
@@ -45,3 +42,8 @@ class LoadCalculator:
             current_psi_2 = self.Q_components[room]["psi_2"]
             q += current_q * current_psi_2
         return self.G_total + q
+
+    @property
+    def q_ULS(self) -> float:
+        return 1.35 * self.G_total + 1.5 * self.Q_total
+
