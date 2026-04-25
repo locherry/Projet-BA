@@ -27,6 +27,7 @@ class Concrete:
         """
         # EC2: E_cm = 22*(f_cm/10)^0.3 [GPa] -> convert to Pa
         return 22e9 * ((self.f_cm / 1e6) / 10) ** 0.3
+    
 
     @property
     def f_ctm(self) -> float:

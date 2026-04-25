@@ -102,7 +102,14 @@ class ReinforcementPlotter:
             zorder=4,
         )
 
-
+        # ── 3) Top longitudinal bars
+        phi_top = 10e-3
+        stirrups_z = [stir_zmin + phi_top, stir_zmax - phi_top]
+        for z in stirrups_z:
+            ax_sec.add_patch(
+                patches.Circle((z, stir_ymax - phi_top), 10e-3, fc="k", ec="none", zorder=5)
+            )
+        
         # ── Legend
         ax_sec.plot([], [], "-", lw=1.2, c="0.4",  label="Cadre extérieur (périmétrique)")
         ax_sec.plot([], [], "-", lw=1.2, c="0.25", label="Barre horizontale de maintien (top)")

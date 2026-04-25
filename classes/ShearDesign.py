@@ -307,10 +307,78 @@ class ShearDesign:
             return series_mm[0] * 1e-3
         return max(valid) * 1e-3
 
+    def stirrup_zones(
+        self,
+        n_legs: int = 2,
+        series_mm: list[int] | None = None,
+    ) -> list[dict]:
+        """
+        Split the beam into zones with constant stirrup spacing.
+        Returns a list of dicts sorted by x_start:
+            [{"s": float, "x_start": float, "x_end": float}, ...]
+        Symmetric beam — computed on left half, mirrored.
+        """
+        s_max = self.max_stirrup_spacing()
+    
+        if series_mm is None:
+            # Build series dynamically up to s_max
+            base = [100, 125, 150, 175, 200, 225, 250, 300, 350, 400, 450, 500]
+            s_max_mm = int(s_max * 1000)
+            # Extend in 50 mm steps beyond 500 up to s_max
+            extra = list(range(550, s_max_mm + 50, 50))
+            series_mm = base + [v for v in extra if v not in base]
+
+        spacing_field = self.stirrup_spacing(n_legs)   # s_t(x) continuous [m]
+        s_max = self.max_stirrup_spacing()
+        L = float(self.x[-1])
+
+        # Work on left half only
+        mask_half = self.x <= L / 2
+        x_half = self.x[mask_half]
+        s_half = np.minimum(spacing_field[mask_half], s_max)
+
+        zones_left = []
+        series = sorted([v * 1e-3 for v in series_mm])  # ascending [m]
+
+        # Find which constructive spacing applies at each x
+        # adopted_s(x) = largest series value ≤ s_half(x)
+        def snap(s_cont):
+            # Cap at s_max first
+            s_cont = min(s_cont, s_max)
+            valid = [v for v in series if v <= s_cont]
+            return max(valid) if valid else series[0]
+
+        snapped = np.array([snap(s) for s in s_half])
+
+        # Group contiguous x with same snapped spacing
+        i = 0
+        while i < len(x_half):
+            s_cur = snapped[i]
+            j = i
+            while j < len(x_half) and snapped[j] == s_cur:
+                j += 1
+            zones_left.append({
+                "s": s_cur,
+                "x_start": float(x_half[i]),
+                "x_end":   float(x_half[j - 1]),
+            })
+            i = j
+
+        # Mirror to right half
+        zones_right = []
+        for z in reversed(zones_left):
+            zones_right.append({
+                "s":       z["s"],
+                "x_start": L - z["x_end"],
+                "x_end":   L - z["x_start"],
+            })
+
+        return zones_left + zones_right
+    
+    
     # ------------------------------------------------------------------ #
     #  Résumé du dimensionnement
     # ------------------------------------------------------------------ #
-
     def design_summary(
         self,
         n_legs: int = 2,

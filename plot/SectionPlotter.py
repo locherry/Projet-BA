@@ -36,11 +36,7 @@ class SectionPlotter:
             figsize=(8, 6),
             gridspec_kw={"width_ratios": [3, 1.5]},
         )
-        fig.suptitle(
-            f"Axe neutre : x = {x_na*100:.1f} cm | A_s = {A_s*1e4:.1f} cm²",
-            fontsize=11,
-        )
-
+        fig.suptitle("Vue de section et position de l'axe neutre", fontsize=14)
 
         # ═══════════════════════════════════════════════════════════════
         # SECTION

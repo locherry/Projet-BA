@@ -205,3 +205,29 @@ class ReinforcementLayout:
                     positions.append((float(xg), float(y_bar), phi / 2))
 
         return positions
+    
+    def total_as(self) -> float:
+        """
+        Total area of longitudinal reinforcement [m²].
+        """
+        total = 0.0
+        for row in self.rows:
+            n_bars = row["n_groups"] * row["bars_per_group"]
+            total += n_bars * np.pi * (row["phi"] / 2) ** 2
+        return total
+
+    def as_per_row(self) -> List[dict]:
+        """
+        Area per row [m²], with label.
+        Returns a list of dicts: {"label": str, "As": float}
+        """
+        result = []
+        for row in self.rows:
+            n_bars = row["n_groups"] * row["bars_per_group"]
+            As = n_bars * np.pi * (row["phi"] / 2) ** 2
+            phi_mm = int(round(row["phi"] * 1e3))
+            result.append({
+                "label": f"{n_bars}HA{phi_mm}",
+                "As": As,
+            })
+        return result

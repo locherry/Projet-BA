@@ -48,8 +48,8 @@ d_estimate = 0.9 * section.h_tot
 design = FlexuralDesign(section, concrete, steel, d=d_estimate)
 
 M_Ed = beam_uls.max_moment()
-M_Eqp = beam_sls_qp.max_moment()
-M_Ed_car = beam_sls_car.max_moment()
+M_ELS_eqp = beam_sls_qp.max_moment()
+M_ELS_car = beam_sls_car.max_moment()
 
 # Durability parameters
 rules = DurabilityRules()
@@ -64,7 +64,7 @@ w_max = rules.w_max(exposure_class)
 
 A_s_required = design.reinforcement_area(M_Ed)
 print(f"M_Ed        = {M_Ed/1e6:.2f} MN·m")
-print(f"M_Eqp       = {M_Eqp/1e6:.2f} MN·m")
+print(f"M_ELS_Eqp   = {M_ELS_eqp/1e6:.2f} MN·m")
 print(f"A_s required (d estimate) = {A_s_required*1e4:.2f} cm²")
 
 # ---------------------------------------------------------------------------- #
@@ -78,9 +78,10 @@ layout.set_exposure(c_min_dur)
 
 # Rows declared bottom → top
 # Bottom row: 4 HA 32
-layout.add_row(n_groups=4, bars_per_group=1, diameter=32e-3, grouped=True)
+layout.add_row(n_groups=3, bars_per_group=1, diameter=40e-3, grouped=True)
 # Top row: 4 HA 25
-layout.add_row(n_groups=4, bars_per_group=1, diameter=25e-3, grouped=False)
+# layout.add_row(n_groups=4, bars_per_group=1, diameter=28e-3, grouped=False)
+layout.add_row(n_groups=3, bars_per_group=1, diameter=32e-3, grouped=False)
 
 # Attach layout — this also updates design.d to d_reel
 design.set_layout(layout)
@@ -96,14 +97,19 @@ A_s = design.reinforcement_area(M_Ed)
 print(f"A_s required (d_reel)     = {A_s*1e4:.2f} cm²")
 
 # Provided area (4 × ø32 bottom + 4 × ø25 top)
-A_s_provided = 4 * np.pi * (32e-3 / 2) ** 2 + 4 * np.pi * (25e-3 / 2) ** 2
-print(f"A_s provided              = {A_s_provided*1e4:.2f} cm²")
+A_s_tot = layout.total_as()
+print(f"A_s provided              = {A_s_tot*1e4:.2f} cm²")
+
+# After selecting bars, always recheck M_Rd with d_reel:
+#  x_na in the flanges
+Mrd = A_s_tot * steel.f_yd * (d_reel - A_s_tot * steel.f_yd/ (2* section.b_eff * concrete.f_cd))
+assert Mrd >= M_Ed, f"M_Rd={Mrd/1e6:.3f} < M_Ed={M_Ed/1e6:.3f} — add bars"
 
 # ---------------------------------------------------------------------------- #
 #                       Step 4 — SLS Stress Limitation                        #
 # ---------------------------------------------------------------------------- #
 
-stress = design.check_stress_limitation(M_Ed, M_Ed_car, A_s=A_s_provided)
+stress = design.check_stress_limitation(M_ELS_car, M_ELS_eqp, A_s=A_s_tot)
 
 print("\n--- SLS Stress Limitation (EC2 §7.2) ---")
 print(f"  φ(∞,t0)   = {stress['phi_inf_t0']:.2f}")
@@ -123,7 +129,7 @@ print(
 # ---------------------------------------------------------------------------- #
 #                       Step 5 — Crack Control                                 #
 # ---------------------------------------------------------------------------- #
-crack = design.crack_control(M_Ed, M_Eqp, A_s=A_s_provided, w_max=w_max)
+crack = design.crack_control(M_ELS_car, M_ELS_eqp, A_s=A_s_tot, w_max=w_max)
 
 print("\n--- Crack Control (EC2 §7.3) ---")
 print(

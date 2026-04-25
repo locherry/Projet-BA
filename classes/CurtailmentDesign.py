@@ -196,7 +196,7 @@ class CurtailmentDesign:
 
             # Neutral axis depth assuming full flange width
             x_na = T / (0.8 * b_eff * f_cd)
-
+            
             if x_na <= h_f:
                 # N.A. in flange
                 Mrd = T * (d - 0.4 * x_na)
@@ -227,20 +227,26 @@ class CurtailmentDesign:
         EC2 §8.4.4 :  l_bd = α₁·α₂·α₃·α₄·α₅ · l_b,rqd   (all α = 1 → conservative)
                       l_bd ≥ max(0.3·l_b,rqd ; 10·φ ; 100 mm)
         """
+    
         f_ck_MPa = self.concrete.f_ck / 1e6
-        f_ctd    = 0.7 * 0.3 * f_ck_MPa ** (2 / 3) / 1.5   # [MPa]
-        f_bd     = 2.25 * 1.0 * 1.0 * f_ctd    
-        
-        # σ_sd at the cut-off is taken conservatively as f_yd (bar fully stressed).
-        # EC2 §8.4.3 allows using the actual stress at the section, which would
-        # reduce l_bd where bars are not fully yielding — conservative as-is.
-        # [MPa]
-        sigma_sd = self.f_yd / 1e6                           # [MPa]
-        phi_mm   = phi * 1e3                                 # [mm]
+        f_ctm    = 0.30 * f_ck_MPa ** (2/3)          # EC2 Table 3.1
+        f_ctk    = 0.7  * f_ctm                       # EC2 Table 3.1 — 5% fractile
+        f_ctd    = f_ctk / 1.5                        # EC2 §3.1.6 — γ_c = 1.5
+        f_bd     = 2.25 * f_ctd                       # EC2 §8.4.2 — η₁=η₂=1.0
 
-        l_b_rqd = (phi_mm / 4) * (sigma_sd / f_bd)          # [mm]
-        l_bd_mm = max(0.3 * l_b_rqd, 10 * phi_mm, 100.0)    # [mm]
-        return l_bd_mm * 1e-3                                 # [m]
+        sigma_sd = self.f_yd / 1e6                    # conservative: bar fully yielding [MPa]
+        phi_mm   = phi * 1e3                          # [mm]
+
+        l_b_rqd  = (phi_mm / 4) * (sigma_sd / f_bd)  # EC2 §8.4.3  [mm]
+
+        # EC2 §8.4.4 — all α = 1.0 (no reduction for cover, confinement, etc.)
+        # This is conservative on the safe side.
+        l_bd_mm  = l_b_rqd   # = α₁·α₂·α₃·α₄·α₅ · l_b,rqd with all α=1
+
+        # EC2 §8.4.4 minimum
+        l_bd_mm  = max(l_bd_mm, 0.3 * l_b_rqd, 10 * phi_mm, 100.0)
+
+        return l_bd_mm * 1e-3                         # [m]
 
     # ------------------------------------------------------------------ #
     #  Intersection search
@@ -248,23 +254,27 @@ class CurtailmentDesign:
 
     def _find_cutoffs(self) -> List[CutoffPoint]:
         """
-        For each layer k (0-based), find the abscissae where
-        M_Ed_shifted(x) crosses M_Rd[k] on the left and right halves.
-        Layer k is theoretically unnecessary outside [x_left, x_right].
+        Layer k is curtailed where M_Ed_shifted drops below M_Rd of the
+        layers BELOW k (i.e. cumulative M_Rd without layer k and above).
+        
+        Layer 0 (HA32, bottom) → threshold = 0  → never curtailed (runs full length)
+        Layer 1 (HA25, top)    → threshold = M_Rd(HA32 alone)
+        Layer 2                → threshold = M_Rd(HA32 + HA25)
+        etc.
         """
         cutoffs = []
         x  = self.x
         ms = self.m_ed_shifted
         L  = self.L
 
-        for k, mrd in enumerate(self.m_rd_cumul):
-            lbd = self._l_bd(self.layers[k].phi)
+        for k, layer in enumerate(self.layers):
+            lbd = self._l_bd(layer.phi)
 
-            # --- left intersection (x < L/2, M increasing) ---
-            x_left = self._interpolate_crossing(x, ms, mrd, side="left")
+            # Threshold = M_Rd with all layers below k (0 for the bottom layer)
+            m_threshold = self.m_rd_cumul[k - 1] if k > 0 else 0.0
 
-            # --- right intersection (x > L/2, M decreasing) ---
-            x_right = self._interpolate_crossing(x, ms, mrd, side="right")
+            x_left  = self._interpolate_crossing(x, ms, m_threshold, side="left")
+            x_right = self._interpolate_crossing(x, ms, m_threshold, side="right")
 
             cutoffs.append(CutoffPoint(
                 layer_index=k,
@@ -306,24 +316,23 @@ class CurtailmentDesign:
     # ------------------------------------------------------------------ #
 
     def summary(self) -> List[dict]:
-        """
-        Return a list of dicts, one per layer, with curtailment results.
-        """
         results = []
         As_cumul = 0.0
         for k, (layer, c) in enumerate(zip(self.layers, self.cutoffs)):
             As_cumul += layer.As
+            m_threshold = self.m_rd_cumul[k - 1] / 1e6 if k > 0 else 0.0
             results.append(dict(
                 layer         = layer.label,
                 As_layer      = layer.As,
                 As_cumul      = As_cumul,
-                M_Rd          = self.m_rd_cumul[k],
+                M_Rd          = self.m_rd_cumul[k],       # M_Rd with this layer active
+                M_threshold   = m_threshold,               # level at which this layer is cut
                 x_cut_left    = c.x_left,
                 x_cut_right   = c.x_right,
-                bar_start     = max(0.0, c.x_left  - c.lbd),
+                bar_start     = max(0.0,    c.x_left  - c.lbd),
                 bar_end       = min(self.L, c.x_right + c.lbd),
                 lbd           = c.lbd,
-                ok_anchorage  = c.lbd <= c.x_left,   # enough room from support
+                ok_anchorage  = c.lbd <= c.x_left,
             ))
         return results
 
@@ -349,3 +358,25 @@ class CurtailmentDesign:
             print(f"    Anchorage check    = {ok}")
 
         print("=" * 65)
+        
+        print(f"\n  VERIFICATION GLOBALE")
+        print(f"  A_s total fourni = {sum(l.As for l in self.layers)*1e4:.2f} cm²")
+        print(f"  f_yd             = {self.f_yd/1e6:.1f} MPa")
+        print(f"  f_cd             = {self.f_cd/1e6:.1f} MPa")
+        print(f"  d                = {self.d*100:.2f} cm")
+        T = sum(l.As for l in self.layers) * self.f_yd
+        x_na = T / (0.8 * self.section.b_eff * self.f_cd)
+        print(f"  T                = {T/1e6:.3f} MN")
+        print(f"  x_na             = {x_na*100:.2f} cm  (h_f = {self.section.h_f*100:.1f} cm)")
+        if x_na <= self.section.h_f:
+            Mrd = T * (self.d - 0.4 * x_na)
+        else:
+            b_w = self.section.b_w
+            b_eff = self.section.b_eff
+            h_f = self.section.h_f
+            C_fl  = 0.8 * (b_eff - b_w) * h_f * self.f_cd
+            x_web = (T - C_fl) / (0.8 * b_w * self.f_cd)
+            Mrd = C_fl*(self.d - h_f/2) + 0.8*b_w*x_web*self.f_cd*(self.d - 0.4*x_web)
+        print(f"  M_Rd recomputed  = {Mrd/1e6:.3f} MN·m")
+        print(f"  M_Ed             = {self.beam.moment(self.L/2)/1e6:.3f} MN·m")
+        print(f"  Margin           = {(Mrd - self.beam.moment(self.L/2))/1e6:+.3f} MN·m")

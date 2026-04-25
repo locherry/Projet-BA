@@ -98,7 +98,7 @@ class FlexuralDesign:
     #  Creep / modular ratio helpers                                           #
     # ---------------------------------------------------------------------- #
 
-    def _creep_coefficient(self, t0: float = 10.0) -> float:
+    def _creep_coefficient(self, t0: float = 28.0) -> float:
         """
         φ(∞, t0) from EC2 Annex B.
         Uses RH = 50 %, h0 computed from b_w and h_tot.
@@ -120,7 +120,7 @@ class FlexuralDesign:
         phi_RH = (1 + (1 - RH) / (0.1 * h0 ** (1 / 3)) * a1) * a2
         beta_fcm = 16.8 / np.sqrt(f_cm_MPa)
         beta_t0 = 1.0 / (0.1 + t0 ** 0.2)
-
+        
         return phi_RH * beta_fcm * beta_t0
 
     def _phi_effective(self, phi_inf_t0: float, M_Eqp: float, M_Ed: float) -> float:
@@ -185,10 +185,10 @@ class FlexuralDesign:
 
     def check_stress_limitation(
         self,
-        M_Ed: float,
-        M_Eqp: float,
+        M_ELS_car: float,
+        M_ELS_eqp: float,
         A_s: float,
-        t0: float = 10.0,
+        t0: float = 28,
     ) -> dict:
         """
         SLS stress limitation check per EC2 §7.2.
@@ -200,8 +200,8 @@ class FlexuralDesign:
 
         Parameters
         ----------
-        M_Ed  : ULS design moment [N·m]  — used to derive φ_ef
-        M_Eqp : quasi-permanent SLS moment [N·m] — used for stress calculation
+        M_ELS_car  : ULS design moment [N·m]  — used to derive φ_ef
+        M_ELS_eqp : quasi-permanent SLS moment [N·m] — used for stress calculation
         A_s   : reinforcement area [m²]
         t0    : age at loading [days]
         """
@@ -210,7 +210,7 @@ class FlexuralDesign:
 
         # ---- creep and effective modular ratio ----
         phi_inf_t0 = self._creep_coefficient(t0)
-        phi_ef = self._phi_effective(phi_inf_t0, M_Eqp, M_Ed)
+        phi_ef = self._phi_effective(phi_inf_t0, M_ELS_eqp, M_ELS_car)
         E_c_eff = self.concrete.E_cm / (1.0 + phi_ef)
         n = self.steel.Es / E_c_eff          # αe with creep
 
@@ -219,8 +219,8 @@ class FlexuralDesign:
         I_hr = self._cracked_inertia(x, A_s, n)
 
         # ---- stresses under quasi-permanent moment ----
-        sigma_c = M_Eqp * x / I_hr                    # concrete top fibre
-        sigma_s = n * M_Eqp * (self.d - x) / I_hr    # steel
+        sigma_c = M_ELS_eqp * x / I_hr                    # concrete top fibre
+        sigma_s = n * M_ELS_eqp * (self.d - x) / I_hr    # steel
 
         # ---- EC2 limits ----
         limit_compression = 0.45 * self.concrete.f_ck   # §7.2(3) quasi-permanent
@@ -248,8 +248,8 @@ class FlexuralDesign:
 
     def crack_control(
         self,
-        M_Ed: float,
-        M_Eqp: float,
+        M_ELS_car: float,
+        M_ELS_eqp: float,
         A_s: float,
         w_max: float = 0.4e-3,
     ) -> dict:
@@ -258,8 +258,8 @@ class FlexuralDesign:
 
         Parameters
         ----------
-        M_Ed  : ULS design moment [N·m]
-        M_Eqp : quasi-permanent SLS moment [N·m]
+        M_ELS_car  : ULS design moment [N·m]
+        M_ELS_eqp : quasi-permanent SLS moment [N·m]
         A_s   : provided reinforcement area [m²]
         w_max : maximum crack width [m] from EC2 Table 7.1N for the exposure class.
                 Default 0.4 mm (XC1, quasi-permanent).  Pass 0.3e-3 or 0.2e-3
@@ -297,7 +297,7 @@ class FlexuralDesign:
         #  2. Minimum reinforcement  (EC2 §7.3.2)                             #
         # ------------------------------------------------------------------ #
         k_c = 0.4                  # pure bending
-        x_na_uls = self.neutral_axis(M_Ed)["x_na"]
+        x_na_uls = self.neutral_axis(M_ELS_car)["x_na"]
         A_ct = b_w * (h - x_na_uls)          # tensile concrete area before cracking
         As_min = k_c * k_factor(x_na_uls) * f_ct_eff * A_ct / self.steel.f_yk
 
@@ -310,7 +310,7 @@ class FlexuralDesign:
         # ------------------------------------------------------------------ #
         #  4. Steel stress under quasi-permanent combination                  #
         # ------------------------------------------------------------------ #
-        sigma_s = n * M_Eqp * (d - x) / I_hr
+        sigma_s = n * M_ELS_eqp * (d - x) / I_hr
 
         # ------------------------------------------------------------------ #
         #  5. Effective concrete area and reinforcement ratio (EC2 §7.3.4)   #

@@ -55,7 +55,7 @@ class ReinforcementPlanPlotter:
         margin_top    = h_tot * 0.35   # room for global length arrow + title
         margin_bottom = h_tot * 0.55   # room for dimension lines below beam
         
-        cotation_offset = 0.2 * h_tot
+        cotation_offset = 0.4 * h_tot
 
         fig, ax = plt.subplots(figsize=(16, 5))
 
@@ -137,19 +137,27 @@ class ReinforcementPlanPlotter:
         ):
             phi = layer.phi
             r_hook = 4 * phi
-            v_hook = 6 * phi
+            v_hook = 5 * phi
+            if phi == 40e-3:
+                # v_hook = 982e-3
+                r_hook = 200e-3
+            elif phi == 32e-3:
+                # v_hook = 646e-3
+                r_hook = 145e-3
+                
+
 
             # Bar extents (same logic as original)
             xL = cutoff.x_left  + r_hook
             xR = cutoff.x_right - r_hook
-            if phi == 32e-3:
-                xL = 0 + r_hook
-                xR = L - r_hook
+            if phi == 40e-3:
+                xL = 0 + r_hook + self.design.layout.c_nom
+                xR = L - r_hook - self.design.layout.c_nom
 
             # Color mapping
-            if "32" in layer.label:
+            if "40" in layer.label:
                 color = "tab:blue"
-            elif "25" in layer.label:
+            elif "32" in layer.label:
                 color = "tab:orange"
             else:
                 color = "tab:gray"
@@ -255,65 +263,83 @@ class ReinforcementPlanPlotter:
 
     # ─────────────────────────────────────────────────────────────
 
-    def _draw_stirrups(self, ax, h_w: float, h_tot: float, cotation_offset:float):
-        """
-        Draw vertical stirrups (cadres) at the adopted spacing from ShearDesign.
-        Each stirrup is rendered as a U-shape: two vertical legs + bottom horizontal,
-        spanning the full web height (cover to cover).
-        A spacing annotation is added below the first stirrup pair.
-        """
-        shear   = self.shear
-        summary = shear.design_summary()
-
-        s       = summary["s_adopted"]          # spacing [m]
-        phi_t   = shear.phi_t                   # stirrup diameter [m]
-        L       = self.L
-        layout  = self.design.layout
-
-        c_nom   = layout.c_nom                  # nominal cover [m]
-
-        # Stirrup legs run from c_nom (bottom) to h_tot - c_nom (top of web)
-        y_bot = c_nom
-        y_top = h_w - c_nom      # stirrups close at the web top (below flange)
-
+    def _draw_stirrups(self, ax, h_w: float, h_tot: float, cotation_offset: float):
+        shear  = self.shear
+        phi_t  = shear.phi_t
+        L      = self.L
+        c_nom  = self.design.layout.c_nom
+        y_bot  = c_nom
+        y_top  = h_tot - c_nom
         color  = "tab:green"
         lw     = 1.4
 
-        # x positions of stirrups: start at s/2 from left support, step by s
-        x_stirrups = np.arange(s / 2, L, s)
+        all_zones = shear.stirrup_zones()
+        zones_left = [z for z in all_zones if z["x_end"] <= L / 2 + 1e-9]
 
-        for xs in x_stirrups:
-            # Left leg
-            ax.plot([xs - phi_t / 2, xs - phi_t / 2], [y_bot, y_top],
+        def draw_stirrup(x_draw):
+            ax.plot([x_draw, x_draw], [y_bot, y_top],
                     color=color, linewidth=lw, zorder=2)
-            # Right leg
-            ax.plot([xs + phi_t / 2, xs + phi_t / 2], [y_bot, y_top],
+            ax.plot([x_draw - phi_t/2, x_draw + phi_t/2], [y_bot, y_bot],
                     color=color, linewidth=lw, zorder=2)
-            # Bottom horizontal (closing bar)
-            ax.plot([xs - phi_t / 2, xs + phi_t / 2], [y_bot, y_bot],
+            ax.plot([x_draw - phi_t/2, x_draw + phi_t/2], [y_top, y_top],
                     color=color, linewidth=lw, zorder=2)
-            # Top horizontal (closing bar — inside flange)
-            ax.plot([xs - phi_t / 2, xs + phi_t / 2], [y_top, y_top],
-                    color=color, linewidth=lw, zorder=2)
+        
+        ax.plot([0, L], [y_top, y_top],
+                color=color, linewidth=lw, zorder=2)
 
-        # ── Spacing annotation (between first two stirrups) ───────
-        if len(x_stirrups) >= 10:
-            x0, x1 = x_stirrups[8], x_stirrups[9]
-            y_ann  = y_bot - 0.06 * h_tot - 0.3* cotation_offset
-            ax.annotate(
-                "",
-                xy=(x1, y_ann), xytext=(x0, y_ann),
-                arrowprops=dict(arrowstyle="<->", linewidth=0.8, color=color),
-                zorder=4,
-            )
-            ax.text(
-                (x0 + x1) / 2, y_ann - 0.04 * h_tot,
-                f"st = {s*100:.0f} cm\n"
-                f"ø{phi_t*1e3:.0f} — {int(round(L/s))} cad.",
-                ha="center", fontsize=6.5, color=color, zorder=4,
-            )
+        # Collect all left-half stirrup x positions, building from left edge inward
+        xs_left = []  # list of (x, s) to track spacing per position
+        x_cursor = 0.0
 
+        for zone in zones_left:
+            s       = zone["s"]
+            x_start = zone["x_start"]
+            x_end   = zone["x_end"]
 
+            # First zone starts at 0, subsequent zones start right after last placed
+            if not xs_left:
+                x_cursor = x_start  # = 0 for first zone
+            # else: x_cursor is already just past the previous zone's last stirrup
+
+            while x_cursor <= x_end + 1e-9:
+                xs_left.append((x_cursor, s))
+                x_cursor += s
+
+            # Zone boundary + annotation
+            if x_start > 0:
+                ax.axvline(x_start, color=color, linewidth=0.5,
+                        linestyle=":", alpha=0.5, zorder=1)
+                ax.axvline(L - x_start, color=color, linewidth=0.5,
+                        linestyle=":", alpha=0.5, zorder=1)
+
+            # Alternate annotation level to avoid overlaps
+            level = zones_left.index(zone) % 2
+            y_ann = y_bot - 0.06 * h_tot - (0.3 + 0.25 * level) * cotation_offset
+            x_mid_left  = (x_start + x_end) / 2
+            x_mid_right = L - x_mid_left
+            for x_mid in [x_mid_left, x_mid_right]:
+                ax.text(x_mid, y_ann, f"st={s*100:.0f} cm",
+                        ha="center", fontsize=6, color=color, zorder=4)
+        # Draw all stirrups: left positions + their exact mirrors
+        # The center gap (between last left stirrup and its mirror) is filled
+        # naturally — no overlap because mirror of xs > L/2 when xs < L/2
+        drawn = set()
+        for xs, s in xs_left:
+            for x_draw in [xs, L - xs]:
+                key = round(x_draw, 6)
+                if key not in drawn:
+                    draw_stirrup(x_draw)
+                    drawn.add(key)
+                    
+        draw_stirrup(L / 2)
+                    
+        # Global label
+        ax.text(
+            L / 2, y_bot - 0.06 * h_tot - 0.35 * cotation_offset,
+            f"ø{phi_t*1e3:.0f} mm",
+            ha="center", fontsize=6.5, color=color, fontweight="bold", zorder=4,
+        )
+        
     def _draw_hook(self, ax, x, y, side, r, v, lw, color):
         """Draw a 45° hook tangent to the bar end."""
 

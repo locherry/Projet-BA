@@ -61,3 +61,8 @@ l_b,rqd = (φ/4) · (σ_sd / f_bd)
 5. La vérification d'ancrage — est-ce qu'il y a assez de place ?
 La dernière vérification consiste à s'assurer que l_bd "rentre" entre l'appui et le point d'arrêt.
 Si cette condition n'était pas vérifiée, il faudrait soit réduire le diamètre des barres (l_bd ∝ φ), soit prévoir un anchorage spécial (crochet, platine d'about).
+
+
+s_t(x) = n · A_t,leg · z · f_ywd · cot θ / V_Ed(x)
+s_t est inversement proportionnel à V_Ed. Là où V_Ed est grand → s_t est petit. 
+Là où V_Ed → 0 → s_t → ∞, borné par s_t,max.
